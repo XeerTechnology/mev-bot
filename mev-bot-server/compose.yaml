@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # MEV Bot Application
+  # This service uses shared infrastructure (PostgreSQL, Kafka, Zookeeper)
+  # Make sure shared infrastructure is running first:
+  #   docker-compose -f ../docker-compose.shared.yml up -d
+  mev-bot:
+    build:
+      context: ..
+      dockerfile: mev-bot-server/Dockerfile
+    container_name: mev-bot-app
+    restart: unless-stopped
+    # Note: depends_on only works within the same compose file
+    # Make sure shared infrastructure is running before starting this service:
+    #   docker-compose -f ../docker-compose.shared.yml up -d
+    environment:
+      NODE_ENV: production
+      # Database - using shared PostgreSQL service
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mev_bot}:${POSTGRES_PASSWORD:-123456}@shared-postgres:5432/${POSTGRES_DB:-mev_bot}
+      # RPC URLs (comma-separated for load balancing)
+      HTTP_RPC_URL: ${HTTP_RPC_URL}
+      WSS_RPC_URL: ${WSS_RPC_URL}
+      # Kafka - using shared Kafka service
+      KAFKA_BROKERS: shared-kafka:9093
+      KAFKA_CLIENT_ID: ${KAFKA_CLIENT_ID:-mev-bot}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-mev-bot-group}
+      KAFKA_TRANSACTIONS_TOPIC: ${KAFKA_TRANSACTIONS_TOPIC:-pending-transactions}
+      KAFKA_OPPORTUNITIES_TOPIC: ${KAFKA_OPPORTUNITIES_TOPIC:-detected-opportunities}
+      # Uniswap Router Addresses
+      UNIVERSAL_ROUTER: ${UNIVERSAL_ROUTER}
+      # Host and Port (optional)
+      HOST: ${HOST:-http://localhost}
+      PORT: ${PORT:-3000}
+    volumes:
+      # Mount .env file if it exists (for local development)
+      - ../.env:/usr/src/app/.env:ro
+    networks:
+      # Use shared infrastructure network
+      - shared-infrastructure-network
+    # Run Prisma migrations on startup, then start the application
+    # Prisma schema is at ../prisma (shared location for all projects)
+    command: sh -c "npx prisma migrate deploy --schema=../prisma/schema.prisma && node dist/index.js"
+
+networks:
+  # Reference the external shared network
+  shared-infrastructure-network:
+    external: true
+    name: shared-infrastructure-network

@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Pool {
+  id          String   @id @default(uuid())
+  chainId     Int // Chain ID (e.g., 1 for Ethereum, 137 for Polygon)
+  poolAddress String
+  token0      String
+  token1      String
+  fee         String
+  routerType  String
+  exists      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([chainId, poolAddress])
+  @@map("pools")
+}
+
+model FactoryAddress {
+  id             String   @id @default(uuid())
+  chainId        Int // Chain ID (e.g., 1 for Ethereum, 137 for Polygon)
+  router         String
+  routerType     String
+  factoryAddress String
+  wethAddress    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([chainId, router])
+  @@map("factory_addresses")
+}
+
+model Token {
+  id            String   @id @default(uuid())
+  chainId       Int // Chain ID (e.g., 1 for Ethereum, 137 for Polygon)
+  tokenAddress  String
+  tokenName     String
+  tokenSymbol   String
+  tokenDecimals Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  opportunitiesAsTokenIn  Opportunity[] @relation("TokenIn")
+  opportunitiesAsTokenOut Opportunity[] @relation("TokenOut")
+
+  @@unique([chainId, tokenAddress])
+  @@map("tokens")
+}
+
+model Opportunity {
+  id             String    @id @default(uuid())
+  chainId        Int // Chain ID (e.g., 1 for Ethereum, 137 for Polygon)
+  txHash         String
+  blockNumber    String?
+  routerAddress  String
+  routerType     String // 'v2' | 'v3'
+  tokenIn        String
+  tokenOut       String
+  tokenInAmount  String // Store as string to handle large numbers
+  tokenOutAmount String
+  expectedProfit String? // Calculated profit potential
+  priceImpact    Float? // Price impact percentage
+  fee            String
+  poolAddress    String?
+  method         String
+  recipient      String?
+  deadline       String?
+  detectedAt     DateTime  @default(now())
+  processedAt    DateTime?
+  status         String    @default("pending") // 'pending', 'detected', 'expired', 'executed'
+  metadata       Json? // Store additional decoded transaction data
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  tokenInRelation  Token @relation("TokenIn", fields: [chainId, tokenIn], references: [chainId, tokenAddress])
+  tokenOutRelation Token @relation("TokenOut", fields: [chainId, tokenOut], references: [chainId, tokenAddress])
+
+  @@unique([chainId, txHash])
+  @@map("opportunities")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  refreshTokens RefreshToken[]
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([token])
+}
