@@ -2,9 +2,43 @@
 import { config as loadEnv } from 'dotenv';
 import { z } from 'zod';
 import { logger } from '../utils/logger';
+import path from 'path';
 
-// Load .env from project root
-loadEnv({ path: `${process.cwd()}/.env` });
+// Load .env from project root (shared location for all projects)
+// This works for both local development and Docker
+// Local: process.cwd() = /path/to/mev-bot (when running from root)
+//       or /path/to/mev-bot/mev-bot-server (when running from project dir)
+// Docker: process.cwd() = /usr/src/app/mev-bot-server (from WORKDIR)
+// Docker volume mount: .env is at /usr/src/app/.env (one level up)
+
+// Try root directory .env first (shared location)
+// From mev-bot-server: go up one level to root
+// Docker: WORKDIR is /usr/src/app/mev-bot-server, .env is at /usr/src/app/.env
+const currentDir = process.cwd();
+let rootEnvPath: string;
+
+// If running from mev-bot-server directory (local or Docker), go up one level
+if (
+  currentDir.includes('mev-bot-server') ||
+  currentDir.endsWith('mev-bot-server')
+) {
+  rootEnvPath = path.resolve(currentDir, '..', '.env');
+} else {
+  // Running from root directory
+  rootEnvPath = path.resolve(currentDir, '.env');
+}
+
+// Load .env from root (shared location)
+const rootResult = loadEnv({ path: rootEnvPath });
+
+// If root .env not found or no env vars loaded, try current directory as fallback
+if (
+  rootResult.error ||
+  (!process.env.DATABASE_URL && !process.env.HTTP_RPC_URL)
+) {
+  const fallbackPath = path.join(currentDir, '.env');
+  loadEnv({ path: fallbackPath });
+}
 
 // Define schema
 const envSchema = z.object({
